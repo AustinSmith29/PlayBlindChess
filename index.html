@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Play Blind Chess!</title>
+        <link rel="stylesheet" type="text/css" href="style.css">
+    </head>
+    <body>
+        <div id="container">
+            <header>
+                <h1>Play Blind Chess</h1>
+                <h2>Who needs pieces and a board to play chess?</h2>
+                <hr class="solid">
+            </header>
+
+            <main>
+
+                <div id="gameOptions" class="toggle-content is-visible">
+                    <div class="row">
+                        <span class="imageButton selected" id="white"><input type="image" class="colorButton" src="imgs/whiteKing.png" title="Play As White" onclick="chooseWhite()" /></span>
+                        <span class="imageButton" id="random"><input type="image" class="colorButton" src="imgs/blackWhiteKing.png" title="Play Random Color" onclick="chooseRandom()" /></span>
+                        <span class="imageButton" id="black"><input type="image" class="colorButton" src="imgs/blackKing.png" title="Play As Black" onclick="chooseBlack()" /></span>
+                    </div>
+                    <div class="row">
+                        <label for="difficulty">Choose Difficulty:</label>
+                        <select name="difficulty" id="difficulty">
+                            <option value=1>Beginner</option>
+                            <option value=3>Novice</option>
+                            <option value=5>Intermediate</option>
+                            <option value=8>Advanced</option>
+                            <option value=15>Master</option>
+                            <option value=20>You Will Lose</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <button type="button" onclick="newGame()">Start Game</button>
+                    </div>
+                    <div id="helpText">
+                        <h3>How to Play?</h3>
+                        <p>
+                            When you start the game you will enter your moves into the text box using algebraic notation. 
+                            If you do not know what that is, you can read about it <a href="https://en.wikipedia.org/wiki/Algebraic_notation_(chess)">here.</a>
+                        </p>
+                        <p>
+                        <i>Note: </i> Castling is done using the capital letter 'O' not zero. <i>i.e</i> <b>O-O</b> or <b>O-O-O</b>
+                        </p>
+                        <p>
+                            <b>Good Luck!</b>
+                        </p>
+                        <p>
+                            If you have any feedback or questions feel free to email <a href="mailto:smithaustin0129@gmail.com">smithaustin0129@gmail.com</a>.
+                        </p>
+                    </div>
+                </div>
+
+                <div id="gameInput" class="toggle-content">
+                    <span id="message"></span>
+                    <div class="row">
+                        <div id="computerMove"></div>
+                    </div>
+                    <div class="row">
+                        <input type="text" name="humanMove" id="humanMove" autocomplete="off" />
+                        <button type="button" onclick="submitMove()">Make Move</button>
+                    </div>
+                    <div class="row no-pad">
+                        <span id="errorMessage"></span>
+                    </div>
+                    <div class="row">
+                        <button type="button" class="actionButton" onclick="settings()">New Game</button>
+                        <button type="button" class="actionButton" id="undoButton" disabled="true" onclick="undoMove()">Undo Move</button>
+                        <button type="button" class="actionButton" onclick="togglePgn()" id="pgnButton">Show PGN</button>
+                    </div>
+                    <div id="pgnContainer">
+                        <span id="pgn"></span>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+
+        <script src="scripts/chess.min.js"></script>
+        <script>
+            const chess = new Chess();
+            var stockfish = new Worker('scripts/stockfish.js');
+            let playerColor = "white";
+            let difficulty = 10;
+            let playersMove = true;
+            let showPgn = false;
+
+            var timer;
+            stockfish.onmessage = function(event) { 
+                const split = event.data.split(" ");
+                if (!split.length) {
+                    return;
+                }
+                const message = split[0];
+
+                if (message === "bestmove") {
+                    const engineMove = split[1];
+                    const move = chess.move(engineMove, {sloppy: true});
+                    if (move === null) {
+                        throw new Exception("Uh Oh! The engine did a bad move.");
+                    }
+                    const moveStr = chess.history()[chess.history().length-1];
+                    document.getElementById("computerMove").innerText = moveStr;
+                    updatePgn();
+                    window.clearInterval(timer);
+                    playersMove = true;
+                    updateMessage();
+                }
+            };
+
+            function newGame() {
+                document.getElementById('gameOptions').classList.remove('is-visible');
+                document.getElementById('gameInput').classList.add('is-visible');
+                document.getElementById('message').innerText = `You are playing as ${playerColor}.`;
+                difficulty = parseInt(document.getElementById('difficulty').value);
+                chess.reset();
+                stockfish.postMessage('uci');
+                stockfish.postMessage(`setoption Skill Level value ${difficulty}`);
+
+                if (playerColor == "white") {
+                    playersMove = true;
+                } else {
+                    playersMove = false;
+                    getEngineMove();
+                }
+
+            }
+
+            function settings() {
+                document.getElementById('gameInput').classList.remove('is-visible');
+                document.getElementById('gameOptions').classList.add('is-visible');
+                document.getElementById("computerMove").innerText = "";
+                document.getElementById('pgn').innerText = "";
+                document.getElementById("undoButton").disabled = true;
+                showPgn = false;
+                document.getElementById('pgnButton').innerText="Show PGN";
+                window.clearInterval(timer);
+            }
+
+            function submitMove() {
+                if (!playersMove) {
+                    return;
+                }
+                const input = document.getElementById("humanMove").value;
+                const move = chess.move(input);
+                if (move === null) {
+                    document.getElementById("errorMessage").innerText = "Invalid Move Entered!";
+                    document.getElementById("humanMove").value = "";
+                }
+                else {
+                    document.getElementById("errorMessage").innerText = "";
+                    document.getElementById("humanMove").value = "";
+                    updatePgn();
+                    playersMove = false;
+                    getEngineMove();
+                    document.getElementById("undoButton").disabled = false;
+                    updateMessage();
+                }
+            }
+
+            function undoMove() {
+                // undo only does half-moves but since I don't want players to undo computer moves
+                // we have to undo two half-moves only when its players turn.
+                if (playersMove) {
+                    chess.undo();
+                    chess.undo();
+
+                    const moveHistory = chess.history();
+                    const clearThreshold = (playerColor == "white") ? 2 : 1;
+
+                    if (moveHistory.length < clearThreshold) {
+                        document.getElementById("computerMove").innerText = "";
+                    } else {
+                        document.getElementById("computerMove").innerText = moveHistory[moveHistory.length-1];
+                    }
+
+                    // call chess.history() again to get updated history
+                    if (moveHistory.length < 1 && playerColor == "white") {
+                        document.getElementById("undoButton").disabled = true;
+                    }
+                    if (moveHistory.length < 2 && playerColor == "black") {
+                        document.getElementById("undoButton").disabled = true;
+                    }
+                    updatePgn();
+                }
+            }
+
+            function getEngineMove() {
+                const fen = chess.fen();
+                stockfish.postMessage(`position fen ${fen}`);
+                stockfish.postMessage(`go depth ${difficulty}`);
+                showEngineThinking();
+            }
+
+            function showEngineThinking() {
+                let waitingEllipses = "";
+                let i = 0;
+                timer = window.setInterval(() => {
+                    i++;
+                    if (i % 4 == 0) {
+                        waitingEllipses = "";
+                    }
+                    else {
+                        waitingEllipses = waitingEllipses + ".";
+                    }
+                    document.getElementById("computerMove").innerText = waitingEllipses;
+                }, 500);
+            }
+
+            function chooseWhite() {
+                document.getElementById('white').classList.add('selected');
+                document.getElementById('black').classList.remove('selected');
+                document.getElementById('random').classList.remove('selected');
+                playerColor = "white";
+            }
+
+            function chooseBlack() {
+                document.getElementById('white').classList.remove('selected');
+                document.getElementById('black').classList.add('selected');
+                document.getElementById('random').classList.remove('selected');
+                playerColor = "black";
+            }
+
+            function chooseRandom() {
+                document.getElementById('white').classList.remove('selected');
+                document.getElementById('black').classList.remove('selected');
+                document.getElementById('random').classList.add('selected');
+                const randomNumber = Math.random();
+                if (randomNumber < 0.5) {
+                    playerColor = "white";
+                } else {
+                    playerColor = "black";
+                }
+            }
+
+            function togglePgn() {
+                const pgnContainer = document.getElementById('pgnContainer');
+                if (showPgn) {
+                    showPgn = false;
+                    document.getElementById('pgnButton').innerText="Show PGN";
+                    pgnContainer.classList.remove('is-visible');
+                }
+                else {
+                    showPgn = true;
+                    document.getElementById('pgnButton').innerText="Hide PGN";
+                    pgnContainer.classList.add('is-visible');
+                }
+                updatePgn();
+            }
+
+            function updatePgn() {
+                if (showPgn) {
+                    document.getElementById('pgn').innerText = chess.pgn();
+                }
+                else {
+                    document.getElementById('pgn').innerText = "";
+                }
+            }
+
+            function updateMessage() {
+                const letter= playerColor[0];
+                if (chess.in_draw()) {
+                    document.getElementById('message').innerText = "The game is a draw.";
+                }
+                else if (chess.in_checkmate() && chess.turn() == letter) {
+                    document.getElementById('message').innerText = "You have lost.";
+                }
+                else if (chess.in_checkmate() && chess.turn() != letter) {
+                    document.getElementById('message').innerText = "Congratulations! You have won!";
+                }
+            }
+        </script>
+    </body>
+</html>
