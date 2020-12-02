@@ -115,8 +115,8 @@
                 document.getElementById('message').innerText = `You are playing as ${playerColor}.`;
                 difficulty = parseInt(document.getElementById('difficulty').value);
                 chess.reset();
+                stockfish.postMessage(`setoption name Skill Level value ${difficulty}`);
                 stockfish.postMessage('uci');
-                stockfish.postMessage(`setoption Skill Level value ${difficulty}`);
 
                 if (playerColor == "white") {
                     playersMove = true;
