@@ -65,7 +65,7 @@
                         <span id="errorMessage"></span>
                     </div>
                     <div class="row">
-                        <button type="button" class="actionButton" onclick="settings()">New Game</button>
+                        <button type="button" class="actionButton" onclick="showSettingsScreen()">New Game</button>
                         <button type="button" class="actionButton" id="undoButton" disabled="true" onclick="undoMove()">Undo Move</button>
                         <button type="button" class="actionButton" onclick="togglePgn()" id="pgnButton">Show PGN</button>
                     </div>
@@ -79,41 +79,71 @@
 
         <script src="scripts/chess.min.js"></script>
         <script>
+
+            const GAME_OPTIONS_ID = 'gameOptions';
+            const GAME_INPUT_ID = 'gameInput';
+
+            const UNDO_BUTTON_ID = 'undoButton';
+            const PGN_BUTTON_ID = 'pgnButton';
+
+            const COMPUTER_MOVE_LABEL_ID = 'computerMove';
+            const GAME_STATUS_LABEL_ID = 'message';
+            const PGN_LABEL_ID = 'pgn';
+            const ERROR_MESSAGE_ID = 'errorMessage';
+
+            const HUMAN_MOVE_INPUT_ID = 'humanMove';
+
             const chess = new Chess();
             var stockfish = new Worker('scripts/stockfish.js');
+
             let playerColor = "white";
             let difficulty = 10;
             let playersMove = true;
             let showPgn = false;
 
+
+            const setComputerMoveLabel = (text) => document.getElementById(COMPUTER_MOVE_LABEL_ID).innerText = text;
+
+            const hideElement = (elementId) => document.getElementById(elementId).classList.remove('is-visible');
+            const showElement = (elementId) => document.getElementById(elementId).classList.add('is-visible');
+            const toggleElementVisibility = (elementId) => {
+                if (document.getElementById(elementId).classList.contains('is-visible')) {
+                    hideElement(elementId);
+                } else {
+                    showElement(elementId);
+                }
+            };
+            const setLabelText = (elementId, text) => document.getElementById(elementId).innerText = text;
+
+            const getEngineMessage = (event) => (event.data && event.data.length) ? event.data.split(" ")[0] : '';
+
+            const makeEngineMove = (event) => {
+                const engineMove = event.data.split(" ")[1];
+                return chess.move(engineMove, {sloppy: true});
+            };
+
             var timer;
             stockfish.onmessage = function(event) { 
-                const split = event.data.split(" ");
-                if (!split.length) {
-                    return;
-                }
-                const message = split[0];
+                const message = getEngineMessage(event);
 
                 if (message === "bestmove") {
-                    const engineMove = split[1];
-                    const move = chess.move(engineMove, {sloppy: true});
-                    if (move === null) {
-                        throw new Exception("Uh Oh! The engine did a bad move.");
-                    }
-                    const moveStr = chess.history()[chess.history().length-1];
-                    document.getElementById("computerMove").innerText = moveStr;
-                    updatePgn();
+                    const move = makeEngineMove(event);
+                    setLabelText(COMPUTER_MOVE_LABEL_ID, move.san);
                     window.clearInterval(timer);
+                    
+                    // TODO: These 3 lines are duplicated on player's move
+                    // so we can abstract this out in a function
+                    updatePgn();
                     playersMove = true;
-                    updateMessage();
+                    updateResultLabel();
                 }
             };
 
             function newGame() {
-                document.getElementById('gameOptions').classList.remove('is-visible');
-                document.getElementById('gameInput').classList.add('is-visible');
-                document.getElementById('message').innerText = `You are playing as ${playerColor}.`;
-                difficulty = parseInt(document.getElementById('difficulty').value);
+                hideElement(GAME_OPTIONS_ID);
+                showElement(GAME_INPUT_ID);
+                setLabelText(GAME_STATUS_LABEL_ID, `You are playing as ${playerColor}.`);
+                const difficulty = parseInt(document.getElementById('difficulty').value);
                 chess.reset();
                 stockfish.postMessage(`setoption name Skill Level value ${difficulty}`);
                 stockfish.postMessage('uci');
@@ -124,38 +154,36 @@
                     playersMove = false;
                     getEngineMove();
                 }
-
             }
 
-            function settings() {
-                document.getElementById('gameInput').classList.remove('is-visible');
-                document.getElementById('gameOptions').classList.add('is-visible');
-                document.getElementById("computerMove").innerText = "";
-                document.getElementById('pgn').innerText = "";
-                document.getElementById("undoButton").disabled = true;
-                showPgn = false;
-                document.getElementById('pgnButton').innerText="Show PGN";
+            function showSettingsScreen() {
+                hideElement(GAME_INPUT_ID);
+                showElement(GAME_OPTIONS_ID);
+                setLabelText(COMPUTER_MOVE_LABEL_ID, "");
+                setLabelText(PGN_LABEL_ID, "");
+                document.getElementById(UNDO_BUTTON_ID).disabled = true;
+                document.getElementById(PGN_BUTTON_ID).innerText = "Show PGN";
                 window.clearInterval(timer);
+                showPgn = false;
             }
 
             function submitMove() {
                 if (!playersMove) {
                     return;
                 }
-                const input = document.getElementById("humanMove").value;
+                const input = document.getElementById(HUMAN_MOVE_INPUT_ID).value;
                 const move = chess.move(input);
                 if (move === null) {
-                    document.getElementById("errorMessage").innerText = "Invalid Move Entered!";
-                    document.getElementById("humanMove").value = "";
-                }
-                else {
-                    document.getElementById("errorMessage").innerText = "";
-                    document.getElementById("humanMove").value = "";
+                    setLabelText(ERROR_MESSAGE_ID, "Invalid Move Entered!");
+                    document.getElementById(HUMAN_MOVE_INPUT_ID).value = "";
+                } else {
+                    setLabelText(ERROR_MESSAGE_ID, "");
+                    document.getElementById(HUMAN_MOVE_INPUT_ID).value = "";
                     updatePgn();
                     playersMove = false;
                     getEngineMove();
-                    document.getElementById("undoButton").disabled = false;
-                    updateMessage();
+                    document.getElementById(UNDO_BUTTON_ID).disabled = false;
+                    updateResultLabel();
                 }
             }
 
@@ -170,17 +198,17 @@
                     const clearThreshold = (playerColor == "white") ? 2 : 1;
 
                     if (moveHistory.length < clearThreshold) {
-                        document.getElementById("computerMove").innerText = "";
+                        setLabelText(COMPUTER_MOVE_LABEL_ID, "");
                     } else {
-                        document.getElementById("computerMove").innerText = moveHistory[moveHistory.length-1];
+                        setLabelText(COMPUTER_MOVE_LABEL_ID, moveHistory[moveHistory.length-1]);
                     }
 
                     // call chess.history() again to get updated history
                     if (moveHistory.length < 1 && playerColor == "white") {
-                        document.getElementById("undoButton").disabled = true;
+                        document.getElementById(UNDO_BUTTON_ID).disabled = true;
                     }
                     if (moveHistory.length < 2 && playerColor == "black") {
-                        document.getElementById("undoButton").disabled = true;
+                        document.getElementById(UNDO_BUTTON_ID).disabled = true;
                     }
                     updatePgn();
                 }
@@ -204,7 +232,7 @@
                     else {
                         waitingEllipses = waitingEllipses + ".";
                     }
-                    document.getElementById("computerMove").innerText = waitingEllipses;
+                    setLabelText(COMPUTER_MOVE_LABEL_ID, waitingEllipses);
                 }, 500);
             }
 
@@ -235,39 +263,41 @@
             }
 
             function togglePgn() {
-                const pgnContainer = document.getElementById('pgnContainer');
                 if (showPgn) {
                     showPgn = false;
                     document.getElementById('pgnButton').innerText="Show PGN";
-                    pgnContainer.classList.remove('is-visible');
+                    hideElement('pgnContainer');
                 }
                 else {
                     showPgn = true;
                     document.getElementById('pgnButton').innerText="Hide PGN";
-                    pgnContainer.classList.add('is-visible');
+                    showElement('pgnContainer');
                 }
                 updatePgn();
             }
 
             function updatePgn() {
                 if (showPgn) {
-                    document.getElementById('pgn').innerText = chess.pgn();
+                    setLabelText(PGN_LABEL_ID, chess.pgn());
                 }
                 else {
-                    document.getElementById('pgn').innerText = "";
+                    setLabelText(PGN_LABEL_ID, "");
                 }
             }
 
-            function updateMessage() {
+            function updateResultLabel() {
+                // chess.turn() returns a 'w' for white and 'b' for black 
+                // so since playerColor is either a string that is 'white'
+                // or 'black' the first letter can be used to compare turns
                 const letter= playerColor[0];
                 if (chess.in_draw()) {
-                    document.getElementById('message').innerText = "The game is a draw.";
+                    setLabelText(GAME_STATUS_LABEL_ID, "The game is a draw.");
                 }
                 else if (chess.in_checkmate() && chess.turn() == letter) {
-                    document.getElementById('message').innerText = "You have lost.";
+                    setLabelText(GAME_STATUS_LABEL_ID, "You have lost.");
                 }
                 else if (chess.in_checkmate() && chess.turn() != letter) {
-                    document.getElementById('message').innerText = "Congratulations! You have won!";
+                    setLabelText(GAME_STATUS_LABEL_ID, "Congratulations! You have won!");
                 }
             }
         </script>
