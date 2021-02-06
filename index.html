@@ -59,7 +59,7 @@
                     </div>
                     <div class="row">
                         <input type="text" name="humanMove" id="humanMove" autocomplete="off" />
-                        <button type="button" onclick="submitMove()">Make Move</button>
+                        <button id="moveSubmitButton" type="button" onclick="submitMove()">Make Move</button>
                     </div>
                     <div class="row no-pad">
                         <span id="errorMessage"></span>
@@ -85,6 +85,7 @@
 
             const UNDO_BUTTON_ID = 'undoButton';
             const PGN_BUTTON_ID = 'pgnButton';
+            const HUMAN_MOVE_SUBMIT_BUTTON_ID = 'moveSubmitButton';
 
             const COMPUTER_MOVE_LABEL_ID = 'computerMove';
             const GAME_STATUS_LABEL_ID = 'message';
@@ -92,6 +93,8 @@
             const ERROR_MESSAGE_ID = 'errorMessage';
 
             const HUMAN_MOVE_INPUT_ID = 'humanMove';
+
+            const PGN_CONTAINER_ID = 'pgnContainer';
 
             const chess = new Chess();
             var stockfish = new Worker('scripts/stockfish.js');
@@ -101,8 +104,13 @@
             let playersMove = true;
             let showPgn = false;
 
-
-            const setComputerMoveLabel = (text) => document.getElementById(COMPUTER_MOVE_LABEL_ID).innerText = text;
+            document.getElementById(HUMAN_MOVE_INPUT_ID).addEventListener("keyup", () => {
+                const ENTER_KEY = 13;
+                if (event.keyCode === ENTER_KEY) {
+                    event.preventDefault();
+                    document.getElementById(HUMAN_MOVE_SUBMIT_BUTTON_ID).click();
+                }
+            });
 
             const hideElement = (elementId) => document.getElementById(elementId).classList.remove('is-visible');
             const showElement = (elementId) => document.getElementById(elementId).classList.add('is-visible');
@@ -131,8 +139,6 @@
                     setLabelText(COMPUTER_MOVE_LABEL_ID, move.san);
                     window.clearInterval(timer);
                     
-                    // TODO: These 3 lines are duplicated on player's move
-                    // so we can abstract this out in a function
                     updatePgn();
                     playersMove = true;
                     updateResultLabel();
@@ -265,13 +271,13 @@
             function togglePgn() {
                 if (showPgn) {
                     showPgn = false;
-                    document.getElementById('pgnButton').innerText="Show PGN";
-                    hideElement('pgnContainer');
+                    document.getElementById(PGN_BUTTON_ID).innerText="Show PGN";
+                    hideElement(PGN_CONTAINER_ID);
                 }
                 else {
                     showPgn = true;
-                    document.getElementById('pgnButton').innerText="Hide PGN";
-                    showElement('pgnContainer');
+                    document.getElementById(PGN_BUTTON_ID).innerText="Hide PGN";
+                    showElement(PGN_CONTAINER_ID);
                 }
                 updatePgn();
             }
